@@ -124,4 +124,40 @@ final class PostgresAdvisoryGuardTest extends TestCase
             fclose($server);
         }
     }
+
+    private function dropGuardSession(): void
+    {
+        // Так выглядит обрыв простаивающей сессии блокировки во время долгой миграции.
+        $admin = TestPostgres::pdo(self::DB);
+        $admin->query(
+            "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND objid::bigint = {$this->key} AND granted",
+        );
+    }
+
+    public function test_dropped_session_does_not_fail_successful_work(): void
+    {
+        $done = false;
+
+        (new PostgresAdvisoryGuard($this->key))->hold(TestPostgres::config(self::DB), function () use (&$done): void {
+            $this->dropGuardSession();
+            $done = true;
+        });
+
+        self::assertTrue($done);
+        self::assertTrue($this->tryLockFromOtherSession());
+    }
+
+    public function test_dropped_session_keeps_the_work_error(): void
+    {
+        try {
+            (new PostgresAdvisoryGuard($this->key))->hold(TestPostgres::config(self::DB), function (): void {
+                $this->dropGuardSession();
+
+                throw new \RuntimeException('миграция упала');
+            });
+            self::fail('Исключение работы должно пробрасываться');
+        } catch (\RuntimeException $e) {
+            self::assertSame('миграция упала', $e->getMessage());
+        }
+    }
 }

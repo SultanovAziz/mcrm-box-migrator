@@ -61,11 +61,24 @@ final class PostgresAdvisoryGuard implements BoxGuard
             try {
                 $work();
             } finally {
-                $pdo->query("SELECT pg_advisory_unlock({$this->lockKey})");
+                $this->unlock($pdo);
             }
         } finally {
             // Закрытие сессии отпускает лок, даже если unlock выше не дошёл.
             $pdo = null;
+        }
+    }
+
+    /**
+     * Ошибка unlock не должна заменять исход миграции: если сессия блокировки
+     * оборвалась (простой во время долгой миграции), лок уже отпущен вместе с ней,
+     * а исключение отсюда выдало бы успешную миграцию за ошибку или скрыло настоящую.
+     */
+    private function unlock(\PDO $pdo): void
+    {
+        try {
+            $pdo->query("SELECT pg_advisory_unlock({$this->lockKey})");
+        } catch (\PDOException) {
         }
     }
 }
