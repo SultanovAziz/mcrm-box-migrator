@@ -30,13 +30,21 @@ docker network create "$NET" >/dev/null
 docker run -d --rm --name "$PG" --network "$NET" \
     -e POSTGRES_PASSWORD=test postgres:16-alpine >/dev/null
 
-for _ in $(seq 1 30); do
+# Docker на рабочей машине ограничен по ядрам, и под нагрузкой PostgreSQL
+# поднимается дольше полуминуты — ждём до 90 с и при неудаче показываем лог.
+ready=0
+for _ in $(seq 1 90); do
     if docker exec "$PG" pg_isready -U postgres -q 2>/dev/null; then
+        ready=1
         break
     fi
     sleep 1
 done
-docker exec "$PG" pg_isready -U postgres -q
+if [ "$ready" -ne 1 ]; then
+    echo "PostgreSQL ($PG) не поднялся за 90 с:" >&2
+    docker logs --tail 20 "$PG" >&2 || true
+    exit 1
+fi
 
 mkdir -p "$CACHE_DIR"
 
