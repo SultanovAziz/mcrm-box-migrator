@@ -87,10 +87,15 @@ final class PostgresControllerTest extends TestCase
 
     public function test_migrates_boxes_and_sets_boxname(): void
     {
-        $this->app($this->fakeVault())->runAction('postgres/migrate', ['fromVault' => true]);
+        $app = $this->app($this->fakeVault());
+        $db = $app->get('db');
+
+        self::assertSame(0, $app->runAction('postgres/migrate', ['fromVault' => true]));
 
         self::assertSame('box_a', $this->probe('box_a'));
         self::assertSame('box_b', $this->probe('box_b'));
+        self::assertSame($db, $app->get('db'));
+        self::assertArrayNotHasKey('currentBoxname', $app->params);
     }
 
     public function test_single_box(): void
@@ -111,16 +116,28 @@ final class PostgresControllerTest extends TestCase
 
     public function test_failure_restores_db_and_params(): void
     {
-        $secret = TestPostgres::secret('box_a');
-        $secret['db']['password'] = 'wrong-password';
-        // Без лока: ошибка подключения должна случиться внутри мигратора Yii.
-        $app = $this->app($this->fakeVault($secret), ['guard' => new PassThroughGuard()]);
+        // Миграция падает внутри migrate/up на box_a — после подмены db и currentBoxname.
+        $app = $this->app($this->fakeVault(), ['migrationPaths' => ['@app/migrations-failing']]);
         $db = $app->get('db');
 
         self::assertSame(1, $app->runAction('postgres/migrate', ['from-vault' => true]));
 
         self::assertSame($db, $app->get('db'));
         self::assertArrayNotHasKey('currentBoxname', $app->params);
+        self::assertTrue(TestPostgres::tableExists('box_b', 'box_fail_probe'));
+    }
+
+    public function test_connection_failure_fails_box_and_continues(): void
+    {
+        $secret = TestPostgres::secret('box_a');
+        $secret['db']['password'] = 'wrong-password';
+        // Без лока: неверный пароль ловит уже подключение Yii.
+        $app = $this->app($this->fakeVault($secret), ['guard' => new PassThroughGuard()]);
+        $db = $app->get('db');
+
+        self::assertSame(1, $app->runAction('postgres/migrate', ['from-vault' => true]));
+
+        self::assertSame($db, $app->get('db'));
         self::assertSame('box_b', $this->probe('box_b'));
     }
 
