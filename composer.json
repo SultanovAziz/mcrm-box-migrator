@@ -1,0 +1,42 @@
+{
+    "name": "mcrm/box-migrator",
+    "description": "Миграции PostgreSQL по всем коробкам из Vault одной командой: ядро без фреймворка и обёртки для Laravel и Yii2",
+    "type": "library",
+    "license": "proprietary",
+    "keywords": ["migrations", "postgresql", "vault", "multi-tenant", "laravel", "yii2"],
+    "require": {
+        "php": ">=8.1",
+        "ext-pdo": "*",
+        "ext-pdo_pgsql": "*",
+        "guzzlehttp/guzzle": "^7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5|^11.5",
+        "orchestra/testbench": "^8.0|^10.0",
+        "yiisoft/yii2": "~2.0.49"
+    },
+    "suggest": {
+        "illuminate/console": "Обёртка Laravel: команда postgres:migrate",
+        "yiisoft/yii2": "Обёртка Yii2: контроллер postgres/migrate"
+    },
+    "repositories": [
+        {"type": "composer", "url": "https://asset-packagist.org"}
+    ],
+    "autoload": {
+        "psr-4": {"Mcrm\\BoxMigrator\\": "src/"}
+    },
+    "autoload-dev": {
+        "psr-4": {"Mcrm\\BoxMigrator\\Tests\\": "tests/"}
+    },
+    "extra": {
+        "laravel": {
+            "providers": ["Mcrm\\BoxMigrator\\Laravel\\BoxMigratorServiceProvider"]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {"yiisoft/yii2-composer": true}
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
