@@ -101,4 +101,27 @@ final class PostgresAdvisoryGuardTest extends TestCase
             self::assertLessThan(3.0, microtime(true) - $started);
         }
     }
+
+    public function test_silent_host_times_out_at_connect_timeout(): void
+    {
+        // Слушает, но не отвечает: TCP-соединение принимает ядро, а ответа на старт
+        // протокола нет — так выглядит коробка за файрволом. Закрытый порт отказывает
+        // мгновенно и таймаут не проверяет.
+        $server = stream_socket_server('tcp://127.0.0.1:0');
+        self::assertNotFalse($server);
+        $port = (int) substr((string) stream_socket_get_name($server, false), strrpos((string) stream_socket_get_name($server, false), ':') + 1);
+        $c = TestPostgres::config(self::DB);
+        $silent = new DbConfig('127.0.0.1', $port, $c->database, $c->username, $c->password, 'disable');
+        $started = microtime(true);
+
+        try {
+            (new PostgresAdvisoryGuard($this->key, 60, 2))->hold($silent, static function (): void {
+            });
+            self::fail('Ожидалось PDOException');
+        } catch (\PDOException) {
+            self::assertLessThan(5.0, microtime(true) - $started);
+        } finally {
+            fclose($server);
+        }
+    }
 }

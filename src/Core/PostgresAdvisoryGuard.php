@@ -33,12 +33,13 @@ final class PostgresAdvisoryGuard implements BoxGuard
 
     public function hold(DbConfig $db, callable $work): void
     {
-        $pdo = new \PDO(
-            $db->dsn().';connect_timeout='.$this->connectTimeoutSeconds,
-            $db->username,
-            $db->password,
-            [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION],
-        );
+        // Таймаут — только через ATTR_TIMEOUT: pdo_pgsql дописывает в конец DSN свой
+        // connect_timeout (по умолчанию 30 с), и libpq берёт последнее значение, так что
+        // параметр в самом DSN молча игнорировался бы.
+        $pdo = new \PDO($db->dsn(), $db->username, $db->password, [
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            \PDO::ATTR_TIMEOUT => $this->connectTimeoutSeconds,
+        ]);
 
         try {
             $pdo->exec("SET lock_timeout = '{$this->waitSeconds}s'");
