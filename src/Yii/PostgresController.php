@@ -19,8 +19,9 @@ use yii\helpers\Console;
  *
  * Подключение в сервисе: 'controllerMap' => ['postgres' => ['class' => PostgresController::class]].
  * Умолчания повторяют рантайм messenger (VaultConnectionStorage): ключ messengers,
- * VAULT_ADDR (по умолчанию http://vault:8200), логин mcrm, VAULT_AUTH_PASSWORD
- * и YANDEX_CRT_PATH. Пароля по умолчанию нет — без него команда отказывает.
+ * VAULT_ADDR (по умолчанию http://vault:8200), VAULT_AUTH_LOGIN (по умолчанию mcrm),
+ * VAULT_AUTH_PASSWORD и YANDEX_CRT_PATH. Пароля по умолчанию нет — без него
+ * команда отказывает.
  */
 class PostgresController extends Controller
 {
@@ -60,7 +61,7 @@ class PostgresController extends Controller
         parent::init();
 
         $this->vaultUrl ??= self::env('VAULT_ADDR') ?? 'http://vault:8200';
-        $this->vaultLogin ??= self::env('VAULT_LOGIN') ?? 'mcrm';
+        $this->vaultLogin ??= self::env('VAULT_AUTH_LOGIN') ?? 'mcrm';
         $this->vaultPassword ??= self::env('VAULT_AUTH_PASSWORD');
         $this->certPath ??= self::env('YANDEX_CRT_PATH');
     }

@@ -152,4 +152,18 @@ final class PostgresControllerTest extends TestCase
 
         self::assertSame(1, $app->runAction('postgres/migrate', ['from-vault' => true]));
     }
+
+    public function test_login_comes_from_the_env_name_messenger_uses(): void
+    {
+        // messenger настраивает логин Vault переменной VAULT_AUTH_LOGIN (config/components.php).
+        $_ENV['VAULT_AUTH_LOGIN'] = 'ops-user';
+
+        try {
+            [$controller] = $this->app(null)->createController('postgres/migrate');
+
+            self::assertSame('ops-user', $controller->vaultLogin);
+        } finally {
+            unset($_ENV['VAULT_AUTH_LOGIN']);
+        }
+    }
 }
