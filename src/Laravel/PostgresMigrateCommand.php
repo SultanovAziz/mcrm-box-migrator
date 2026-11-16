@@ -20,7 +20,7 @@ final class PostgresMigrateCommand extends Command
     protected $signature = 'postgres:migrate
         {boxname?      : Имя коробки; без него нужен --from-vault}
         {--from-vault  : Взять список коробок из Vault}
-        {--pretend     : Показать SQL, ничего не применяя}';
+        {--pretend     : Показать SQL, не применяя миграции}';
 
     protected $description = 'Применяет PostgreSQL-миграции по коробкам, список и подключения берёт из Vault (mcrm/box-migrator)';
 

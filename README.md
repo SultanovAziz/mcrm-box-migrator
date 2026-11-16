@@ -14,7 +14,7 @@ php yii postgres/migrate --from-vault         # Yii2: messenger
 |---|---|
 | `boxname` | одна коробка вместо всех |
 | `--from-vault` | все коробки из Vault (без `boxname` обязателен) |
-| `--pretend` | Laravel — показать SQL; Yii — показать список неприменённых миграций (`migrate/new`) |
+| `--pretend` | Laravel — показать SQL; Yii — показать список неприменённых миграций (`migrate/new`). Миграции не применяются, но служебная таблица учёта миграций создаётся, если её ещё нет |
 
 ## Подключение
 
@@ -39,7 +39,7 @@ php yii postgres/migrate --from-vault         # Yii2: messenger
 | `connection` | `pgsql` | миграции сервиса идут через другое соединение (main-crm — `pgsql_box`) |
 | `paths` | `[]` — `database/migrations` | нужен явный список путей |
 | `default_sslmode` | `prefer` | — |
-| `lock_wait_seconds` | `60` | — |
+| `lock_wait_seconds` | `60` | `0` — не ждать: занятая база сразу считается ошибкой коробки |
 | `vault.*` | `connection-storage.vault.*` | — |
 
 ### Yii2
@@ -55,7 +55,7 @@ php yii postgres/migrate --from-vault         # Yii2: messenger
 ```
 
 Окружение — то же, что у рантайма messenger: `VAULT_ADDR` (по умолчанию
-`http://vault:8200`), `VAULT_LOGIN` (по умолчанию `mcrm`), `VAULT_AUTH_PASSWORD`,
+`http://vault:8200`), `VAULT_AUTH_LOGIN` (по умолчанию `mcrm`), `VAULT_AUTH_PASSWORD`,
 `YANDEX_CRT_PATH`. Ключ сервиса по умолчанию — `messengers`. Миграции видят имя
 коробки в `Yii::$app->params['currentBoxname']`.
 
@@ -69,6 +69,10 @@ php yii postgres/migrate --from-vault         # Yii2: messenger
 - **Нет секрета сервиса — коробка пропускается.** На верхнем уровне Vault лежат не только
   коробки (`card/`, `transactions/`). Если коробка названа явно (`boxname`), отсутствие
   секрета — ошибка.
+- **Политика Vault.** Пользователю нужны `list` на `secret/metadata/*` и `read` на
+  `secret/data/*`. Если чтение выдано по коробкам, на каталоги-некоробки Vault отвечает
+  403, а не 404, и мигратор считает это ошибкой коробки, а не пропуском: отказ в доступе
+  к настоящей коробке не должен проходить молча.
 - **Коробки идут строго по одной.** Ошибка одной не останавливает остальные.
 - **Блокировка на базе коробки.** На время миграций берётся `pg_advisory_lock`, у каждого
   сервиса свой ключ. Второй прогон той же базы ждёт до `lock_wait_seconds`, потом эта
@@ -96,21 +100,31 @@ php yii postgres/migrate --from-vault         # Yii2: messenger
 ## Для DevOps: шаг в CI
 
 Миграции — **отдельный шаг пайплайна после сборки образа и до выкатки**. Он запускается на
-только что собранном образе, из сети, где видны Vault и базы коробок:
+только что собранном образе, из сети, где видны Vault и базы коробок, **с тем же окружением,
+что у контейнера сервиса**:
 
 ```bash
 # Laravel-сервис (cash, main-crm, community)
-docker run --rm --network <сеть> \
-  -e VAULT_URL -e VAULT_LOGIN -e VAULT_PASS \
+docker run --rm --network <сеть> --env-file <окружение сервиса> \
   <образ> php artisan postgres:migrate --from-vault
 
 # messenger
-docker run --rm --network <сеть> \
-  -e VAULT_ADDR -e VAULT_LOGIN -e VAULT_AUTH_PASSWORD -e YANDEX_CRT_PATH \
+docker run --rm --network <сеть> --env-file <окружение сервиса> \
   <образ> php yii postgres/migrate --from-vault
 ```
 
 Ненулевой код — выкатка останавливается.
+
+Из окружения мигратор читает:
+
+| Сервисы | Переменные |
+|---|---|
+| cash, main-crm, community | `VAULT_URL`, `VAULT_LOGIN`, `VAULT_PASS`, `VAULT_MOUNT_PATH`, `CONNECTION_STORAGE_SERVICE_KEY` |
+| messenger | `VAULT_ADDR`, `VAULT_AUTH_LOGIN`, `VAULT_AUTH_PASSWORD`, `YANDEX_CRT_PATH` |
+
+`CONNECTION_STORAGE_SERVICE_KEY` обязателен там, где умолчание в конфиге сервиса не совпадает с
+именем секрета. У community умолчание — `resto-service`, а секрет лежит в `community`: без
+переменной все коробки будут пропущены и команда вернёт 1.
 
 - **Не в `Dockerfile`.** При сборке нет доступа к Vault и базам, и пересборка образа не
   должна менять прод.
@@ -135,5 +149,5 @@ PHP_IMAGE=cash-service-app:latest scripts/test.sh    # PHP 8.4
 scripts/test.sh --testsuite laravel                  # core | laravel | yii
 ```
 
-Скрипт поднимает одноразовый `postgres:16-alpine` в своей сети `box-migrator-test` и
-удаляет его после прогона.
+Скрипт поднимает одноразовые `postgres:16-alpine` и `hashicorp/vault:1.17` (dev-режим) в
+своей сети `box-migrator-test` и удаляет их после прогона.
