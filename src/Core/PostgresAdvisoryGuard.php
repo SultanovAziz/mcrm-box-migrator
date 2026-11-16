@@ -42,21 +42,7 @@ final class PostgresAdvisoryGuard implements BoxGuard
         ]);
 
         try {
-            $pdo->exec("SET lock_timeout = '{$this->waitSeconds}s'");
-
-            try {
-                $pdo->query("SELECT pg_advisory_lock({$this->lockKey})");
-            } catch (\PDOException $e) {
-                if ((string) $e->getCode() === self::LOCK_NOT_AVAILABLE) {
-                    throw new LockTimeoutException(
-                        "База {$db->describe()} занята другим прогоном миграций дольше {$this->waitSeconds} с",
-                        0,
-                        $e,
-                    );
-                }
-
-                throw $e;
-            }
+            $this->lock($pdo, $db);
 
             try {
                 $work();
@@ -66,6 +52,36 @@ final class PostgresAdvisoryGuard implements BoxGuard
         } finally {
             // Закрытие сессии отпускает лок, даже если unlock выше не дошёл.
             $pdo = null;
+        }
+    }
+
+    private function lock(\PDO $pdo, DbConfig $db): void
+    {
+        // lock_timeout = 0 в PostgreSQL означает «без таймаута», а не «не ждать»:
+        // нулевое (и отрицательное) ожидание — это попытка без ожидания, иначе
+        // такой конфиг вешал бы CI навсегда.
+        if ($this->waitSeconds <= 0) {
+            if (! (bool) $pdo->query("SELECT pg_try_advisory_lock({$this->lockKey})")->fetchColumn()) {
+                throw new LockTimeoutException("База {$db->describe()} занята другим прогоном миграций");
+            }
+
+            return;
+        }
+
+        $pdo->exec("SET lock_timeout = '{$this->waitSeconds}s'");
+
+        try {
+            $pdo->query("SELECT pg_advisory_lock({$this->lockKey})");
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === self::LOCK_NOT_AVAILABLE) {
+                throw new LockTimeoutException(
+                    "База {$db->describe()} занята другим прогоном миграций дольше {$this->waitSeconds} с",
+                    0,
+                    $e,
+                );
+            }
+
+            throw $e;
         }
     }
 

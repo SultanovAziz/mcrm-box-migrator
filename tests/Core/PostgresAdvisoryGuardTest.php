@@ -160,4 +160,20 @@ final class PostgresAdvisoryGuardTest extends TestCase
             self::assertSame('миграция упала', $e->getMessage());
         }
     }
+
+    public function test_zero_wait_fails_at_once_instead_of_waiting_forever(): void
+    {
+        // lock_timeout = 0 в PostgreSQL значит «без таймаута»: ожидание 0 не должно вешать CI.
+        $holder = TestPostgres::pdo(self::DB);
+        $holder->query("SELECT pg_advisory_lock({$this->key})");
+        $started = microtime(true);
+
+        try {
+            (new PostgresAdvisoryGuard($this->key, 0))->hold(TestPostgres::config(self::DB), static function (): void {
+            });
+            self::fail('Ожидалось LockTimeoutException');
+        } catch (LockTimeoutException) {
+            self::assertLessThan(2.0, microtime(true) - $started);
+        }
+    }
 }
