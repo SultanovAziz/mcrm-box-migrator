@@ -1,0 +1,8 @@
+# В архив пакета (его composer скачивает в сервисы) попадают только src/, config/,
+# composer.json и README.md. Тесты, конфиг PHPUnit и скрипты разработки остаются в
+# репозитории, но в vendor/ сервисов не едут.
+/tests              export-ignore
+/scripts            export-ignore
+/phpunit.xml.dist   export-ignore
+/.gitignore         export-ignore
+/.gitattributes     export-ignore
